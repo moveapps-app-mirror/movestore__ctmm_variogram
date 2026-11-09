@@ -9,6 +9,11 @@ svf_cache <- cachem::cache_mem(max_size = 256 * 1024^2)
 variogram_cached <- memoise::memoise(ctmm::variogram, cache = svf_cache)
 mean_variogram_cached <- memoise::memoise(function(svf) mean(svf), cache = svf_cache)
 
+# TEMPORARY probe: shows on the page which R process serves it, to check
+# whether MoveApps keeps the same process (and so the cache) between opens
+probe_process_started <- Sys.time()
+probe_session_count <- 0
+
 # Determine plot grid parameters for the given plot width and number of panels.
 # Caps the grid at `max_cols` columns if there are more plots than `max_cols`.
 # Ensures that plots do not have height collapsed as fewer columns/more rows
@@ -72,6 +77,7 @@ shinyModuleUserInterface <- function(id, label) {
   ns <- NS(id) ## all IDs of UI functions need to be wrapped in ns()
   tagList(
     titlePanel("Variogram"),
+    verbatimTextOutput(ns("probe")), # TEMPORARY probe
     # The zoom slider's own numbers mean nothing to users, so they are
     # hidden and the time-lag cutoff is shown as text underneath instead
     tags$style(".zoom-slider .irs-min, .zoom-slider .irs-max,
@@ -113,8 +119,18 @@ shinyModuleUserInterface <- function(id, label) {
 }
 
 shinyModule <- function(input, output, session, data){ ## The parameter "data" is reserved for the data object passed on from the previous app
-  ns <- session$ns 
-  
+  ns <- session$ns
+
+  # TEMPORARY probe: same process ID and load time across opens means the
+  # process (and its cache) survived
+  probe_session_count <<- probe_session_count + 1
+  probe_text <- sprintf(
+    "R process %d, loaded %s UTC, session %d in this process, %d cached items at session start",
+    Sys.getpid(), format(probe_process_started, "%Y-%m-%d %H:%M:%S", tz = "UTC"),
+    probe_session_count, svf_cache$size()
+  )
+  output$probe <- renderText(probe_text)
+
   output$selectvar <- renderUI({
     checkboxGroupInput(
       ns("selected_ids"),
